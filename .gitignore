@@ -1,0 +1,27 @@
+# Ignore datasets
+/data/
+/datasets/
+/dataset/
+/data_raw/
+
+# Ignore checkpoints and saved models
+*.ckpt
+*.pth
+/checkpoints/
+/models/
+/weights/
+
+# Ignore outputs, logs, temporary files
+/output/
+/logs/
+/temp/
+/*.log
+*.tmp
+
+# Python bytecode and cache
+__pycache__/
+*.pyc
+*.pyo
+
+/build/
+

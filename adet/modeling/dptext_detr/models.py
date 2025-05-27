@@ -33,8 +33,8 @@ class DPText_DETR(nn.Module):
 
         self.epqm = cfg.MODEL.TRANSFORMER.EPQM
         self.efsa = cfg.MODEL.TRANSFORMER.EFSA
-        self.ctrl_point_embed = nn.Embedding(self.num_ctrl_points, self.d_model)
-
+        self.ctrl_point_embed = nn.Embedding(self.num_ctrl_points, self.d_model) # c초기 생성해둠
+        
         self.transformer = DeformableTransformer_Det(
             d_model=self.d_model,
             nhead=self.nhead,

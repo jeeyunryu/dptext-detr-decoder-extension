@@ -29,12 +29,16 @@ _PREDEFINED_SPLITS_TEXT = {
     "lsvt_poly_train_pos": ("lsvt/train_images","lsvt/train_poly_pos.json"),
     "art_poly_train_pos": ("art/train_images_rotate","art/train_poly_pos.json"),
     "art_poly_train_rotate_pos": ("art/train_images_rotate","art/train_poly_rotate_pos.json"),
+    "mpsc_poly_train_pos" : ("mpsc/image/train", "mpsc_other/mpsc_train_poly_pos.json"),
+
     #-------------------------------------------------------------------------------------------------------
     "totaltext_poly_test": ("totaltext/test_images_rotate", "totaltext/test_poly.json"),
     "totaltext_poly_test_rotate": ("totaltext/test_images_rotate", "totaltext/test_poly_rotate.json"),
     "ctw1500_poly_test": ("ctw1500/test_images","ctw1500/test_poly.json"),
     "art_test": ("art/test_images","art/test_poly.json"),
     "inversetext_test": ("inversetext/test_images","inversetext/test_poly.json"),
+    "mpsc_poly_test": ("mpsc/image/test", "mpsc_other/mpsc_test_poly.json"),
+
 }
 
 metadata_text = {

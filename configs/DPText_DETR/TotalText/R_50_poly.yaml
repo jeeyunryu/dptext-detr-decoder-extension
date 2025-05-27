@@ -5,7 +5,7 @@ DATASETS:
   TEST: ("totaltext_poly_test",)  # or "inversetext_test", "totaltext_poly_test_rotate"
 
 MODEL:
-  WEIGHTS: "output/r_50_poly/pretrain/model_final.pth"  # or the provided pre-trained model
+  WEIGHTS: "output/pretrain.pth"  # or the provided pre-trained model
 
 SOLVER:
   IMS_PER_BATCH: 8

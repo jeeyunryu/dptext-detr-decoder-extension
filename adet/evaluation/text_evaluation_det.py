@@ -68,6 +68,8 @@ class TextDetEvaluator(DatasetEvaluator):
             self.submit = True
         elif "inversetext" in dataset_name:
             self._text_eval_gt_path = "datasets/evaluation/gt_inversetext.zip"
+        elif "mpsc" in dataset_name:
+            self._text_eval_gt_path = "datasets/evaluation/gt_mpsc.zip"
         else:
             raise NotImplementedError
 

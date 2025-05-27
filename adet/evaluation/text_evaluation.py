@@ -81,6 +81,8 @@ class TextEvaluator(DatasetEvaluator):
         elif "inversetext" in dataset_name:
             self._text_eval_gt_path = "datasets/evaluation/gt_inversetext.zip"
             self._word_spotting = False
+        elif "mpsc" in dataset_name:
+            self._text_eval_gt_path = "datasets/evaluation/gt_mpsc.zip"
         else:
             self._text_eval_gt_path = ""
         self._text_eval_confidence = cfg.MODEL.FCOS.INFERENCE_TH_TEST

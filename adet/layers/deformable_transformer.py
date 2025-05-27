@@ -15,7 +15,7 @@ from torch.nn.init import normal_
 from adet.utils.misc import inverse_sigmoid
 from adet.modeling.dptext_detr.utils import MLP, gen_point_pos_embed
 from .ms_deform_attn import MSDeformAttn
-from timm.models.layers import DropPath
+from timm.layers import DropPath
 
 
 class DeformableTransformer_Det(nn.Module):
@@ -153,7 +153,7 @@ class DeformableTransformer_Det(nn.Module):
         valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h], -1)
         return valid_ratio
 
-    def init_control_points_from_anchor(self, reference_points_anchor):
+    def init_control_points_from_anchor(self, reference_points_anchor): ####!!!!!
         # reference_points_anchor: bs, nq, 4
         # return size:
         # - reference_points: (bs, nq, n_pts, 2)

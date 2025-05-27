@@ -103,13 +103,13 @@ def process_polygon_positional_label_form(json_in, json_out):
     '''
     with open(json_in) as f_json_in:
         anno_dict = json.load(f_json_in)
-    insts_list = anno_dict['annotations']
+    insts_list = anno_dict['annotations'] # 텍스트 인스턴스 개수: 13092
     new_insts_list = []
     roll_num = 0  # to count approximate inverse-like instances
     total_num = len(insts_list)
     for inst in tqdm(insts_list):
         new_inst = copy.deepcopy(inst)
-        poly = np.array(inst['polys']).reshape((-1, 2))
+        poly = np.array(inst['polys']).reshape((-1, 2)) # poly.shape: (16, 2)
         # suppose there are 16 points for each instance, 8 for each side
         assert poly.shape[0] == 16
         is_ccw = Polygon(poly).exterior.is_ccw
@@ -121,7 +121,7 @@ def process_polygon_positional_label_form(json_in, json_out):
         roll_flag = False
         start_line, end_line = poly[:8], poly[8:][::-1, :]
 
-        if min(start_line[:, 1]) > max(end_line[:, 1]):
+        if min(start_line[:, 1]) > max(end_line[:, 1]): # start line이 바다인 경우를 가리킴
             roll_num += 1
             poly = roll_pts(poly)
             new_inst.update(polys=poly)
@@ -129,8 +129,8 @@ def process_polygon_positional_label_form(json_in, json_out):
             continue
 
         # right and left
-        if min(start_line[:, 0]) > max(end_line[:, 0]):
-            if min(poly[:, 1]) == min(end_line[:, 1]):
+        if min(start_line[:, 0]) > max(end_line[:, 0]): # start line이 바닥에 (아니면 완전히 오른쪽으로 눕혀있는 텍스트일 수 있음)
+            if min(poly[:, 1]) == min(end_line[:, 1]): # 더확실히 하고자 위함인 듯
                 roll_flag = True
             if roll_flag:
                 roll_num += 1
@@ -142,8 +142,9 @@ def process_polygon_positional_label_form(json_in, json_out):
             continue
 
         # left and right
-        if max(start_line[:, 0]) < min(end_line[:, 0]):
-            if min(poly[:, 1]) == min(end_line[:, 1]):
+        # 텍스트가 옆으로 돌아가 있고 + top이 왼쪽으로 돌아가 있는 경우
+        if max(start_line[:, 0]) < min(end_line[:, 0]): # start line  바닥에. 아니면 완전히 왼쪽으로 기운 텍스트
+            if min(poly[:, 1]) == min(end_line[:, 1]): #  end line이 위에 있다면 거꾸로 돼 있는 텍스트를 가리키는 뜻
                 roll_flag = True
             if roll_flag:
                 roll_num += 1
@@ -177,16 +178,15 @@ def process_polygon_positional_label_form(json_in, json_out):
     assert len(new_insts_list) == total_num
 
     anno_dict.update(annotations=new_insts_list)
-    with open(json_out, mode='w+') as f_json_out:
-        json.dump(anno_dict, f_json_out)
-
+    # with open(json_out, mode='w+') as f_json_out:
+    #     json.dump(anno_dict, f_json_out)
     # the approximate inverse-like ratio, the actual ratio should be lower
-    print(f'Inverse-like Ratio: {roll_num / total_num * 100: .2f}%. Finished.')
+    print(f'Inverse-like Ratio: {roll_num / total_num * 100: .2f}%. Finished.') # MPSC train 데이터셋 4개 뿐
 
 
 if __name__ == '__main__':
     # an example of processing the positional label form for polygon control points.
     process_polygon_positional_label_form(
-        json_in='./datasets/totaltext/train_poly_ori.json',
-        json_out='./datasets/totaltext/train_poly_pos_example.json'
+        json_in='./datasets/mpsc_other/mpsc_train_poly.json',
+        json_out='./datasets/mpsc_other/mpsc_train_poly_pos.json'
     )

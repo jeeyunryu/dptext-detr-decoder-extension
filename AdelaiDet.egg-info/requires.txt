@@ -1,0 +1,17 @@
+termcolor>=1.1
+Pillow>=6.0
+yacs>=0.1.6
+tabulate
+cloudpickle
+matplotlib
+tqdm>4.29.0
+tensorboard
+Polygon3
+shapely
+scikit-image
+editdistance
+opencv-python
+numba==0.57.0
+
+[all]
+psutil
