@@ -15,7 +15,8 @@ from torch.nn.init import normal_
 from adet.utils.misc import inverse_sigmoid
 from adet.modeling.dptext_detr.utils import MLP, gen_point_pos_embed
 from .ms_deform_attn import MSDeformAttn
-from timm.layers import DropPath
+from timm.models.layers import DropPath
+
 
 
 class DeformableTransformer_Det(nn.Module):
@@ -71,6 +72,12 @@ class DeformableTransformer_Det(nn.Module):
             d_model,
             epqm
         )
+
+        # self.decoder_rec = TFDecoder(
+        #     num_classes=args.nb_classes,
+        #     max_seq_len=args.max_len,
+        #     text_cond_vis=args.text_cond_vis,)
+        
 
         self.level_embed = nn.Parameter(torch.Tensor(num_feature_levels, d_model))
 
@@ -193,7 +200,7 @@ class DeformableTransformer_Det(nn.Module):
         spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=src_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
-
+        
         # encoder
         memory = self.encoder(
             src_flatten,
@@ -203,7 +210,6 @@ class DeformableTransformer_Det(nn.Module):
             lvl_pos_embed_flatten,
             mask_flatten
         )
-
         # prepare input for decoder
         bs, _, c = memory.shape
         output_memory, output_proposals = self.gen_encoder_output_proposals(memory, mask_flatten, spatial_shapes)
@@ -226,6 +232,17 @@ class DeformableTransformer_Det(nn.Module):
         init_reference_out = reference_points
         # learnable control point content queries
         query_embed = query_embed.unsqueeze(0).expand(bs, -1, -1, -1)
+        # char_query_embed = char_query_embed.unsqueeze(0).expand(bs, -1, -1, -1)
+
+        # character composite query 만들기
+
+        # tgt, tgt_lens 필요함
+        # memory patch로 쪼개기
+        # 각 영역 마다 (GT) 피처맵 crop out_enc 구성 (평가할 때는 알려줄 수 없는데...)
+        # top K개, 즉 모든 앵커박스에 대해서 예측하고 나중에 매칭해야되나?
+        # 
+
+        # dec_output, dec_attn_maps = self.decoder_rec(out_enc=memory, targets=tgt, tgt_lens=tgt_lens, train_mode=self.training)
 
         hs, inter_references = self.decoder(
             query_embed,
@@ -239,7 +256,8 @@ class DeformableTransformer_Det(nn.Module):
         )
         inter_references_out = inter_references
 
-        return hs, init_reference_out, inter_references_out, enc_outputs_class, enc_outputs_coord_unact
+
+        return hs, init_reference_out, inter_references_out, enc_outputs_class, enc_outputs_coord_unact, memory, level_start_index
 
 
 class DeformableTransformerEncoderLayer(nn.Module):
@@ -308,7 +326,7 @@ class DeformableTransformerEncoder(nn.Module):
         for lvl, (H_, W_) in enumerate(spatial_shapes):
             ref_y, ref_x = torch.meshgrid(torch.linspace(0.5, H_ - 0.5, H_, dtype=torch.float32, device=device),
                                           torch.linspace(0.5, W_ - 0.5, W_, dtype=torch.float32, device=device))
-            ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, lvl, 1] * H_)
+            ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, lvl, 1] * H_) # valid_ratios 가 뭔지 모르겠음
             ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, lvl, 0] * W_)
             ref = torch.stack((ref_x, ref_y), -1)
             reference_points_list.append(ref)
@@ -518,14 +536,14 @@ class DeformableTransformerDecoder_Det(nn.Module):
         for lid, layer in enumerate(self.layers):
             if reference_points.shape[-1] == 4:
                 reference_points_input = reference_points[:, :, None] \
-                                         * torch.cat([src_valid_ratios, src_valid_ratios], -1)[:, None]
+                                         * torch.cat([src_valid_ratios, src_valid_ratios], -1)[:, None] # *** src_valid_ratios 이게 뭔지 모르겠음...
             else:
                 # enter here
                 assert reference_points.shape[-1] == 2
                 if self.epqm:
                     # reference_points: (bs, nq, n_pts, 2)
                     # reference_points_input: (bs, nq, n_pts, 4, 2)
-                    reference_points_input = reference_points[:, :, :, None] * src_valid_ratios[:, None, None]
+                    reference_points_input = reference_points[:, :, :, None] * src_valid_ratios[:, None, None] # 왜 4가 추가되는지?
                 else:
                     reference_points_input = reference_points[:, :, None] * src_valid_ratios[:, None]
 
@@ -547,7 +565,7 @@ class DeformableTransformerDecoder_Det(nn.Module):
 
             # update the reference points
             if self.ctrl_point_coord is not None:
-                tmp = self.ctrl_point_coord[lid](output)
+                tmp = self.ctrl_point_coord[lid](output) # prediction head
                 tmp += inverse_sigmoid(reference_points)
                 tmp = tmp.sigmoid()
                 reference_points = tmp.detach()

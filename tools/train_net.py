@@ -38,6 +38,7 @@ from detectron2.evaluation import (
 from detectron2.solver.build import maybe_add_gradient_clipping
 from detectron2.modeling import GeneralizedRCNNWithTTA
 from detectron2.utils.logger import setup_logger
+from detectron2.config import CfgNode as CN
 
 from adet.data.dataset_mapper import DatasetMapperWithBasis
 from adet.config import get_cfg
@@ -247,14 +248,26 @@ def setup(args):
     """
     Create configs and perform basic setups.
     """
+
+    
     cfg = get_cfg()
+    print(hasattr(cfg, "DATALOADER")) 
     cfg.merge_from_file(args.config_file)
+    print(hasattr(cfg, "DATALOADER")) 
     cfg.merge_from_list(args.opts)
+
+    if not hasattr(cfg, "DATALOADER"):
+        cfg.DATALOADER = CN()
+        print("Added DATALOADER")
+    cfg.DATALOADER.NUM_WORKERS = 0
+
     cfg.freeze()
     default_setup(cfg, args)
 
     rank = comm.get_rank()
     setup_logger(cfg.OUTPUT_DIR, distributed_rank=rank, name="adet")
+
+    
 
     return cfg
 

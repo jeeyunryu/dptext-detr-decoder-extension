@@ -120,30 +120,34 @@ class CtrlPointHungarianMatcher(nn.Module):
 
     def forward(self, outputs, targets):
         with torch.no_grad():
-            bs, num_queries = outputs["pred_logits"].shape[:2]
+            bs, num_queries = outputs["pred_logits"].shape[:2] 
 
             # We flatten to compute the cost matrices in a batch
-            out_prob = outputs["pred_logits"].flatten(0, 1).sigmoid()
+            out_prob = outputs["pred_logits"].flatten(0, 1).sigmoid() # [200, 16, 1]
             # [batch_size, n_queries, n_points, 2] --> [batch_size * num_queries, n_points * 2]
-            out_pts = outputs["pred_ctrl_points"].flatten(0, 1).flatten(-2)
+            out_pts = outputs["pred_ctrl_points"].flatten(0, 1).flatten(-2) # [200, 32]
 
             # Also concat the target labels and boxes
-            tgt_pts = torch.cat([v["ctrl_points"] for v in targets]).flatten(-2)
+            tgt_pts = torch.cat([v["ctrl_points"] for v in targets]).flatten(-2) # [4, 16, 2] -> [4, 32] 여기서 드는 의문은 왜 배치간 구분 안 하지? (해결됨)
             neg_cost_class = (1 - self.alpha) * (out_prob ** self.gamma) * \
                              (-(1 - out_prob + 1e-8).log())
             pos_cost_class = self.alpha * \
                              ((1 - out_prob) ** self.gamma) * (-(out_prob + 1e-8).log())
             # hack here for label ID 0
-            cost_class = (pos_cost_class[..., 0] - neg_cost_class[..., 0]).mean(-1, keepdims=True)
+            cost_class = (pos_cost_class[..., 0] - neg_cost_class[..., 0]).mean(-1, keepdims=True) # [200, 1]
 
-            cost_kpts = torch.cdist(out_pts, tgt_pts, p=1)
 
-            C = self.class_weight * cost_class + self.coord_weight * cost_kpts
-            C = C.view(bs, num_queries, -1).cpu()
+            cost_kpts = torch.cdist(out_pts, tgt_pts, p=1) # [200, 4] 200개의 예측과 4개의 타겟간 total cost 계산
 
-            sizes = [len(v["ctrl_points"]) for v in targets]
-            indices = [linear_sum_assignment(
-                c[i]) for i, c in enumerate(C.split(sizes, -1))]
+            C = self.class_weight * cost_class + self.coord_weight * cost_kpts 
+            C = C.view(bs, num_queries, -1).cpu() # [2, 100, 4] 4인 이유: 좌표가 넷 
+
+            sizes = [len(v["ctrl_points"]) for v in targets] # 각 배치에서의 타겟 개수
+            # for i, c_mat in enumerate(C.split(sizes, -1)):
+                # if not torch.isfinite(c_mat).all():
+                #     print(f"Invalid entries found in cost matrix {i}")
+                #     print(c_mat)
+            indices = [linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))] # [2, 100, 2] Hungarian algorithm
             return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
 
 

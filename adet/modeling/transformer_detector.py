@@ -19,13 +19,13 @@ class Joiner(nn.Sequential):
         super().__init__(backbone, position_embedding)
 
     def forward(self, tensor_list: NestedTensor):
-        xs = self[0](tensor_list)
+        xs = self[0](tensor_list) # MaskedBackbone()
         out: List[NestedTensor] = []
         pos = []
         for _, x in xs.items():
             out.append(x)
             # position encoding
-            pos.append(self[1](x).to(x.tensors.dtype))
+            pos.append(self[1](x).to(x.tensors.dtype)) # PositionalEncoding2D()
 
         return out, pos
 
@@ -39,16 +39,32 @@ class MaskedBackbone(nn.Module):
         self.feature_strides = [backbone_shape[f].stride for f in backbone_shape.keys()]
         self.num_channels = backbone_shape[list(backbone_shape.keys())[-1]].channels
 
+    
+
+
+
     def forward(self, images):
+        
+
+
+
         features = self.backbone(images.tensor)
+        # if torch.isnan(images.tensor).any():
+        #     print(f'\'image.tensor\' has nans: {images.tensor}') # -> x
         masks = self.mask_out_padding(
             [features_per_level.shape for features_per_level in features.values()],
             images.image_sizes,
             images.tensor.device,
         )
         assert len(features) == len(masks)
-        for i, k in enumerate(features.keys()):
+        for i, k in enumerate(features.keys()): 
+            # if torch.isnan(features[k]).any():
+            #     print(f'{k}th feature has nans: {features[k]}')
+           
             features[k] = NestedTensor(features[k], masks[i])
+           
+            
+        
         return features
 
     def mask_out_padding(self, feature_shapes, image_sizes, device):
@@ -129,6 +145,7 @@ class TransformerPureDetector(nn.Module):
             aux_weight_dict.update(
                 {k + f'_enc': v for k, v in enc_weight_dict.items()})
             weight_dict.update(aux_weight_dict)
+        weight_dict.update({'rec_loss': 0.5})
 
         enc_losses = ['labels', 'boxes']
         dec_losses = ['labels', 'ctrl_points']
@@ -185,9 +202,12 @@ class TransformerPureDetector(nn.Module):
         if self.training:
             gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
             targets = self.prepare_targets(gt_instances)
-            output = self.dptext_detr(images)
+            output, tgt, tgt_lens = self.dptext_detr(images, targets)
+            # output = self.dptext_detr(images, targets)
             # compute the loss
-            loss_dict = self.criterion(output, targets)
+            loss_dict = self.criterion(output, targets, tgt, tgt_lens)
+            # loss_dict = self.criterion(output, targets) 
+
             weight_dict = self.criterion.weight_dict
             for k in loss_dict.keys():
                 if k in weight_dict:
@@ -209,6 +229,8 @@ class TransformerPureDetector(nn.Module):
     def prepare_targets(self, targets):
         new_targets = []
         for targets_per_image in targets:
+            # 텍스트 정보: targets_per_image.text
+            gt_texts = targets_per_image.text
             h, w = targets_per_image.image_size
             image_size_xyxy = torch.as_tensor([w, h, w, h], dtype=torch.float, device=self.device)
             gt_classes = targets_per_image.gt_classes
@@ -219,7 +241,7 @@ class TransformerPureDetector(nn.Module):
                              torch.as_tensor([w, h], dtype=torch.float, device=self.device)[None, None, :]
             gt_ctrl_points = torch.clamp(gt_ctrl_points[:,:,:2], 0, 1)
             new_targets.append(
-                {"labels": gt_classes, "boxes": gt_boxes, "ctrl_points": gt_ctrl_points}
+                {"labels": gt_classes, "boxes": gt_boxes, "ctrl_points": gt_ctrl_points, "texts": gt_texts}
             )
         return new_targets
 
@@ -227,16 +249,16 @@ class TransformerPureDetector(nn.Module):
         assert len(ctrl_point_cls) == len(image_sizes)
         results = []
 
-        prob = ctrl_point_cls.mean(-2).sigmoid()
+        prob = ctrl_point_cls.mean(-2).sigmoid() # 텍스트 하나에 대한 확률값 평균으로 하나만 
         scores, labels = prob.max(-1)
 
         for scores_per_image, labels_per_image, ctrl_point_per_image, image_size in zip(
                 scores, labels, ctrl_point_coord, image_sizes
         ):
-            selector = scores_per_image >= self.test_score_threshold
+            selector = scores_per_image >= self.test_score_threshold # 0.4
             scores_per_image = scores_per_image[selector]
             labels_per_image = labels_per_image[selector]
-            ctrl_point_per_image = ctrl_point_per_image[selector]
+            ctrl_point_per_image = ctrl_point_per_image[selector] # selector 100개의 예측 중 임계값 넘는 예측의 인덱스
 
             result = Instances(image_size)
             result.scores = scores_per_image

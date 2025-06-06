@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from adet.utils.misc import accuracy, generalized_box_iou, box_cxcywh_to_xyxy, box_xyxy_to_cxcywh, is_dist_avail_and_initialized
 from detectron2.utils.comm import get_world_size
+from .seqCrossEntropyLoss_dig import SeqCrossEntropyLoss
 
 
 def sigmoid_focal_loss(inputs, targets, num_inst, alpha: float = 0.25, gamma: float = 2):
@@ -71,6 +72,9 @@ class SetCriterion(nn.Module):
         self.focal_alpha = focal_alpha
         self.focal_gamma = focal_gamma
         self.num_ctrl_points = num_ctrl_points
+
+        self.criterion_rec = SeqCrossEntropyLoss()
+
 
     def loss_labels(self, outputs, targets, indices, num_inst, log=False):
         """Classification loss (NLL)
@@ -146,12 +150,13 @@ class SetCriterion(nn.Module):
         """
         assert 'pred_ctrl_points' in outputs
         idx = self._get_src_permutation_idx(indices)
-        src_ctrl_points = outputs['pred_ctrl_points'][idx]
+        src_ctrl_points = outputs['pred_ctrl_points'][idx] # 실제 GT와 매칭되는 예측
         target_ctrl_points = torch.cat([t['ctrl_points'][i] for t, (_, i) in zip(targets, indices)], dim=0)
 
         loss_ctrl_points = F.l1_loss(src_ctrl_points, target_ctrl_points, reduction='sum')
 
         losses = {'loss_ctrl_points': loss_ctrl_points / num_inst}
+
         return losses
 
     @staticmethod
@@ -178,17 +183,43 @@ class SetCriterion(nn.Module):
         assert loss in loss_map, f'do you really want to compute {loss} loss?'
         return loss_map[loss](outputs, targets, indices, num_inst, **kwargs)
 
-    def forward(self, outputs, targets):
+    def forward(self, outputs, targets, tgt, tgt_lens): # tgt, tgt_lens
         """ This performs the loss computation.
         Parameters:
-            outputs: dict of tensors, see the output specification of the model for the format
+            outputs: dict of tensors, see the output specification of the model for the format: dict_keys(['pred_logits', 'pred_ctrl_points', 'aux_outputs', 'enc_outputs'])
             targets: list of dicts, such that len(targets) == batch_size.
                   The expected keys in each dict depends on the losses applied, see each loss' doc
         """
         outputs_without_aux = {k: v for k, v in outputs.items() if k != 'aux_outputs' and k != 'enc_outputs'}
+
         
         # Retrieve the matching between the outputs of the last layer and the targets
         indices = self.dec_matcher(outputs_without_aux, targets)
+
+      
+        #  배치: 0 -> indices[0]
+        # i번째 매치: -> out: indices[0][0][i]와 GT: indices[0][1][i]
+        # i번째 예측 좌표 -> outputs['pred_ctrl_points'][<배치>][<indices[0][0][i] 값>]
+        # i 번째 GT 텍스트 어노테이션 -> targets[0]['texts'][indices[0][1][i]]
+        # row_ind, col_ind
+        # det_ctrl_pnts = []
+        # det_gt_texts = []
+        # bs = len(targets)
+
+    
+        # for i in range(bs):
+        #     num_gts = len(indices[i][0])
+        #     batch_list = []
+        #     texts_list = []
+        #     for j in range(num_gts):
+        #         batch_list.append(outputs['pred_ctrl_points'][i][indices[i][0][j]])
+        #         texts_list.append(targets[i]['texts'][indices[i][1][j]])
+
+        #     det_ctrl_pnts.append(torch.stack(batch_list, dim=0))
+        #     det_gt_texts.append(torch.stack(texts_list, dim=0))
+
+
+
 
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_inst = sum(len(t['ctrl_points']) for t in targets)
@@ -229,4 +260,16 @@ class SetCriterion(nn.Module):
                 l_dict = {k + f'_enc': v for k, v in l_dict.items()}
                 losses.update(l_dict)
 
+        rec_loss = self.criterion_rec(outputs['dec_outputs'], tgt, tgt_lens)
+
+        # if torch.isnan(rec_loss):
+        #     print("rec_loss 값이 NaN입니다!")
+        #     print(outputs['dec_outputs'])
+        # else:
+        #     print("rec_loss는 정상적인 값입니다:", rec_loss.item())
+        l_dict_rec = {'rec_loss': rec_loss}
+        losses.update(l_dict_rec)
+
+
+        # return losses, det_ctrl_pnts, det_gt_texts
         return losses
